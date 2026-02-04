@@ -37,12 +37,12 @@ const categories = [
     available: true,
   },
   {
-    href: '/fotosoutez',
+    href: 'https://www.alik.cz/n/lopiho-souteze',
     title: 'Fotosoutěž',
-    description: 'Nahraj fotky dle zadání a sbírej hodnocení!',
+    description: 'Nahraj fotky dle zadání a sbírej body!',
     icon: Camera,
     color: 'bg-success',
-    available: false,
+    available: true,
   },
   {
     href: '/obchudek',
@@ -168,7 +168,7 @@ export default function Index() {
                   Kategorie soutěže
                 </h2>
                 <p className="text-muted-foreground max-w-xl">
-                  Vyber si kategorii a začni sbírat body. Každá kategorie má svá pravidla a odměny!
+                  Vyber si kategorii a začni sbírat body. Každá kategorie má svá pravidla!
                 </p>
               </div>
 
@@ -186,7 +186,7 @@ export default function Index() {
                         {category.title}
                         {!category.available && (
                           <span className="text-xs bg-muted px-2 py-1 rounded-full text-muted-foreground font-normal">
-                            Brzy
+                            Na Alíkovi
                           </span>
                         )}
                       </CardTitle>
@@ -201,8 +201,8 @@ export default function Index() {
                           </Button>
                         </Link>
                       ) : (
-                        <Button variant="ghost" className="w-full" disabled>
-                          Připravujeme
+                        <Button variant="ghost" className="w-full">
+                          Na Alíka
                         </Button>
                       )}
                     </CardContent>
