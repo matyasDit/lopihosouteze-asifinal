@@ -5,7 +5,7 @@ export function useOAuth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const login = async () => {
+  const startOAuthFlow = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -13,8 +13,9 @@ export function useOAuth() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Chyba při přihlašování");
       setLoading(false);
+      throw err;
     }
   };
 
-  return { login, loading, error };
+  return { startOAuthFlow, login: startOAuthFlow, loading, error, isConfigured: true };
 }
