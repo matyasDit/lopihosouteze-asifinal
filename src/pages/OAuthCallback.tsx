@@ -14,93 +14,59 @@ export default function OAuthCallback() {
   const [status, setStatus] = useState<CallbackStatus>('processing');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
-  useEffect(() => {
-    const handleCallback = async () => {
-      try {
-        // Check for error in URL params
-        const error = searchParams.get('error');
-        const errorDescription = searchParams.get('error_description');
-        
-        if (error) {
-          console.error('OAuth error:', error, errorDescription);
-          setStatus('error');
-          setErrorMessage(errorDescription || 'Přihlášení selhalo');
-          return;
-        }
-
-        // Check if this is a magic link callback (from our edge function)
-        const tokenHash = searchParams.get('token_hash');
-        const type = searchParams.get('type');
-
-        if (tokenHash && type === 'magiclink') {
-          // Verify the magic link
-          const { data, error: verifyError } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: 'magiclink',
-          });
-
-          if (verifyError) {
-            console.error('Magic link verification error:', verifyError);
-            setStatus('error');
-            setErrorMessage(verifyError.message);
-            return;
-          }
-
-          if (data.session) {
-            setStatus('success');
-            toast.success('Úspěšně přihlášeno!');
-            setTimeout(() => navigate('/'), 1500);
-            return;
-          }
-        }
-
-        // Check for access_token in hash (implicit flow fallback)
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-
-        if (accessToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken || '',
-          });
-
-          if (sessionError) {
-            console.error('Session error:', sessionError);
-            setStatus('error');
-            setErrorMessage(sessionError.message);
-            return;
-          }
-
-          setStatus('success');
-          toast.success('Úspěšně přihlášeno!');
-          setTimeout(() => navigate('/'), 1500);
-          return;
-        }
-
-        // Check current session - maybe already authenticated
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session) {
-          setStatus('success');
-          toast.success('Úspěšně přihlášeno!');
-          setTimeout(() => navigate('/'), 1500);
-          return;
-        }
-
-        // No valid auth data found
+useEffect(() => {
+  const handleCallback = async () => {
+    try {
+      // Check for error in URL params
+      const error = searchParams.get('error');
+      if (error) {
         setStatus('error');
-        setErrorMessage('Neplatná autentizační odpověď');
-
-      } catch (err) {
-        console.error('Callback processing error:', err);
-        setStatus('error');
-        setErrorMessage(err instanceof Error ? err.message : 'Neočekávaná chyba');
+        setErrorMessage(error);
+        return;
       }
-    };
 
-    handleCallback();
-  }, [searchParams, navigate]);
+      // Get tokens from URL query (our new edge function)
+      const accessToken = searchParams.get('access_token');
+      const refreshToken = searchParams.get('refresh_token');
+
+      if (accessToken && refreshToken) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        if (sessionError) {
+          setStatus('error');
+          setErrorMessage(sessionError.message);
+          return;
+        }
+
+        setStatus('success');
+        toast.success('Úspěšně přihlášeno!');
+        setTimeout(() => navigate('/'), 1500);
+        return;
+      }
+
+      // Fallback: maybe already authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setStatus('success');
+        setTimeout(() => navigate('/'), 1500);
+        return;
+      }
+
+      // No valid auth data found
+      setStatus('error');
+      setErrorMessage('Neplatná autentizační odpověď');
+
+    } catch (err) {
+      setStatus('error');
+      setErrorMessage(err instanceof Error ? err.message : 'Neočekávaná chyba');
+    }
+  };
+
+  handleCallback();
+}, [searchParams, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-hero p-4">
