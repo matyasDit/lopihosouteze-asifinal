@@ -1,144 +1,82 @@
-// src/pages/oauth-callback.tsx
-import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { clearStoredState } from "@/lib/oauth";
 
-type CallbackStatus = 'processing' | 'success' | 'error';
-
-export default function OAuthCallback() {
+const OAuthCallback = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState<CallbackStatus>('processing');
-  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleCallback = async () => {
-      try {
-        // Check for error in URL params
-        const error = searchParams.get('error');
-        if (error) {
-          setStatus('error');
-          setErrorMessage(error);
-          return;
-        }
-
-        // Get tokens from query params (from our new edge function)
-        const accessToken = searchParams.get('access_token');
-        const refreshToken = searchParams.get('refresh_token');
-
-        if (accessToken && refreshToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-
-          if (sessionError) {
-            setStatus('error');
-            setErrorMessage(sessionError.message);
-            return;
-          }
-
-          setStatus('success');
-          toast.success('Úspěšně přihlášeno!');
-          setTimeout(() => navigate('/'), 1500);
-          return;
-        }
-
-        // Fallback: check if already authenticated
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          setStatus('success');
-          setTimeout(() => navigate('/'), 1500);
-          return;
-        }
-
-        // No valid auth data found
-        setStatus('error');
-        setErrorMessage('Neplatná autentizační odpověď');
-
-      } catch (err) {
-        console.error('Callback processing error:', err);
-        setStatus('error');
-        setErrorMessage(err instanceof Error ? err.message : 'Neočekávaná chyba');
+      // Check for error in query params
+      const params = new URLSearchParams(window.location.search);
+      const errorMsg = params.get("error");
+      if (errorMsg) {
+        setError(errorMsg);
+        clearStoredState();
+        return;
       }
+
+      // Extract tokens from URL hash
+      const hash = window.location.hash.substring(1);
+      const hashParams = new URLSearchParams(hash);
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+
+      if (!accessToken || !refreshToken) {
+        setError("Chybí přihlašovací tokeny");
+        clearStoredState();
+        return;
+      }
+
+      // Set the session in Supabase client
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      clearStoredState();
+
+      if (sessionError) {
+        console.error("Session error:", sessionError);
+        setError("Nepodařilo se nastavit session");
+        return;
+      }
+
+      // Clean URL and redirect
+      window.history.replaceState(null, "", "/oauth");
+      navigate("/", { replace: true });
     };
 
     handleCallback();
-  }, [searchParams, navigate]);
+  }, [navigate]);
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="max-w-md rounded-lg border border-destructive/50 bg-card p-6 text-center shadow-lg">
+          <h1 className="mb-2 text-xl font-bold text-destructive">Chyba přihlášení</h1>
+          <p className="mb-4 text-muted-foreground">{error}</p>
+          <button
+            onClick={() => navigate("/")}
+            className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
+          >
+            Zpět na hlavní stránku
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-hero p-4">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl animate-float" />
-        <div className="absolute bottom-20 right-10 w-48 h-48 bg-accent/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '1s' }} />
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="text-center">
+        <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <p className="text-muted-foreground">Přihlašování...</p>
       </div>
-
-      <Card className="w-full max-w-md relative z-10 shadow-hero border-0 bg-card/95 backdrop-blur-sm animate-scale-in">
-        <CardHeader className="text-center space-y-4 pb-2">
-          <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-glow">
-            {status === 'processing' && (
-              <div className="bg-primary/20 w-full h-full rounded-2xl flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-primary animate-spin" />
-              </div>
-            )}
-            {status === 'success' && (
-              <div className="bg-success/20 w-full h-full rounded-2xl flex items-center justify-center">
-                <CheckCircle className="w-8 h-8 text-success" />
-              </div>
-            )}
-            {status === 'error' && (
-              <div className="bg-destructive/20 w-full h-full rounded-2xl flex items-center justify-center">
-                <XCircle className="w-8 h-8 text-destructive" />
-              </div>
-            )}
-          </div>
-          <CardTitle className="text-2xl font-display font-bold">
-            {status === 'processing' && 'Ověřuji přihlášení...'}
-            {status === 'success' && 'Přihlášení úspěšné!'}
-            {status === 'error' && 'Chyba přihlášení'}
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="text-center space-y-4">
-          {status === 'processing' && (
-            <p className="text-muted-foreground">
-              Počkej chvilku, ověřujeme tvoje přihlášení...
-            </p>
-          )}
-
-          {status === 'success' && (
-            <p className="text-muted-foreground">
-              Za chvíli tě přesměrujeme na hlavní stránku.
-            </p>
-          )}
-
-          {status === 'error' && (
-            <>
-              <p className="text-muted-foreground">
-                {errorMessage || 'Něco se pokazilo při přihlašování.'}
-              </p>
-              <div className="flex gap-2 justify-center pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => navigate('/auth')}
-                >
-                  Zkusit znovu
-                </Button>
-                <Button
-                  variant="hero"
-                  onClick={() => navigate('/')}
-                >
-                  Na hlavní stránku
-                </Button>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
-}
+};
+
+export default OAuthCallback;
