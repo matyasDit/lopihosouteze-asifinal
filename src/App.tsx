@@ -24,6 +24,7 @@ import NotFound from "./pages/NotFound";
 import PravidlaOchranaOU from "./pages/PravidlaOchranaOU";
 import AuthExternal from "./pages/AuthExternal";
 import AuthEmail from "./pages/AuthEmail";
+import Pozvankovnik from "./pages/Pozvankovnik";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,7 @@ const App = () => {
               <Route path="/posta" element={<Layout><Posta /></Layout>} />
               <Route path="/u/:username" element={<Layout><Profile /></Layout>} />
               <Route path="*" element={<Layout><NotFound /></Layout>} />
+              <Route path="/pozvankovnik" element={<Layout><Pozvankovnik /></Layout>} />
           </Routes>
         </BrowserRouter>
       </PasswordChangeChecker>
