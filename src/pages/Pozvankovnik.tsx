@@ -20,8 +20,8 @@ export default function SrazChecklist() {
         { label: "Název srazu", done: false },
         { label: "Datum", done: false },
         { label: "Město", done: false },
-        { label: "Místo srazu (přesně)", done: false },
-        { label: "Čas", done: false },
+        { label: "Místo srazu", done: false },
+        { label: "Čas, dopoledne, odpoledne", done: false },
       ],
     },
     {
@@ -38,18 +38,8 @@ export default function SrazChecklist() {
     {
       title: "👥 Organizace",
       color: "#a29bfe",
-      items: [
-        { label: "Pořadatel", done: false },
-        { label: "Kontakt", done: false },
-        { label: "Doprovod info", done: false },
-      ],
-    },
-    {
-      title: "📌 Povinné části",
-      color: "#fd7e14",
-      items: [
-        { label: "Srazová sekce", done: false },
-        { label: "Odkaz na rozpravu", done: false },
+      items: 
+        { label: "Informace o srazové sekci" false },
       ],
     },
     {
@@ -57,7 +47,7 @@ export default function SrazChecklist() {
       color: "#e74c3c",
       items: [
         { label: "Vlastní zodpovědnost", done: false },
-        { label: "Oblečení", done: false },
+        { label: "Dopravné", done: false },
         { label: "Peníze", done: false },
         { label: "Možná změna programu", done: false },
       ],
@@ -92,8 +82,7 @@ export default function SrazChecklist() {
     <div className="max-w-2xl mx-auto mt-10 rounded-2xl shadow-xl overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-400 to-cyan-400 text-white p-6">
-        <h2 className="text-2xl font-bold">📝 Pozvánka na sraz</h2>
-        <p className="opacity-90">Checklist, ať na nic nezapomeneš 😉</p>
+        <h2 className="text-2xl font-bold">📝 Pozvánkovník pro ztracené organizátory srazu :D</h2>
 
         {/* Progress bar */}
         <div className="mt-4">
