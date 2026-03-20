@@ -38,7 +38,7 @@ export default function SrazChecklist() {
     {
       title: "👥 Organizace",
       color: "#a29bfe",
-      items: 
+      items: [
         { label: "Informace o srazové sekci", done:false },
       ],
     },
