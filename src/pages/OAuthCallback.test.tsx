@@ -5,6 +5,8 @@ const mocked = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   setSessionMock: vi.fn(),
   clearStoredStateMock: vi.fn(),
+  getStoredStateMock: vi.fn(),
+  getSupabaseUrlMock: vi.fn(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -25,6 +27,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 vi.mock("@/lib/oauth", () => ({
   clearStoredState: mocked.clearStoredStateMock,
+  getStoredState: mocked.getStoredStateMock,
+  getSupabaseUrl: mocked.getSupabaseUrlMock,
 }));
 
 import OAuthCallback from "./OAuthCallback";
@@ -34,6 +38,12 @@ describe("OAuthCallback", () => {
     mocked.navigateMock.mockReset();
     mocked.setSessionMock.mockReset();
     mocked.clearStoredStateMock.mockReset();
+    mocked.getStoredStateMock.mockReset();
+    mocked.getSupabaseUrlMock.mockReset();
+
+    mocked.getStoredStateMock.mockReturnValue("ok-state");
+    mocked.getSupabaseUrlMock.mockReturnValue("https://wmmwsbrevzfeqzdrcbrc.supabase.co");
+
     window.history.replaceState({}, "", "/oauth");
   });
 
@@ -43,9 +53,20 @@ describe("OAuthCallback", () => {
     render(<OAuthCallback />);
 
     expect(await screen.findByText("Chyba přihlášení")).toBeInTheDocument();
-    expect(screen.getByText("invalid_state")).toBeInTheDocument();
+    expect(screen.getByText("Neplatný nebo expirovaný state")).toBeInTheDocument();
     expect(mocked.clearStoredStateMock).toHaveBeenCalledTimes(1);
     expect(mocked.setSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("zobrazi invalid state pro code callback bez odpovidajiciho local state", async () => {
+    mocked.getStoredStateMock.mockReturnValue(null);
+    window.history.replaceState({}, "", "/oauth?code=abc123&state=ok-state");
+
+    render(<OAuthCallback />);
+
+    expect(await screen.findByText("Chyba přihlášení")).toBeInTheDocument();
+    expect(screen.getByText("Neplatný nebo expirovaný state")).toBeInTheDocument();
+    expect(mocked.clearStoredStateMock).toHaveBeenCalledTimes(1);
   });
 
   it("nastavi session z hash tokenu a presmeruje na hlavni stranku", async () => {
