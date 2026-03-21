@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// ENV
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
@@ -20,6 +19,10 @@ export default function Dictionary() {
   const [translation, setTranslation] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const isImageUrl = (url: string) => {
+    return /^https?:\/\/.*\.(png|jpg|jpeg|gif|webp)$/i.test(url);
+  };
 
   const fetchWords = async () => {
     setLoading(true);
@@ -93,11 +96,27 @@ export default function Dictionary() {
           <div key={w.id} style={styles.wordCard}>
             <div>
               <div style={styles.word}>
-                {w.term}
-                <span style={styles.arrow}>→</span>
-                {w.translation}
+                {isImageUrl(w.term) ? (
+                  <img src={w.term} style={styles.image} />
+                ) : (
+                  <>
+                    {w.term}
+                    <span style={styles.arrow}>→</span>
+                    {w.translation}
+                  </>
+                )}
               </div>
-              {w.note && <div style={styles.note}>{w.note}</div>}
+
+              {!isImageUrl(w.term) && w.note && (
+                <div style={styles.note}>{w.note}</div>
+              )}
+
+              {isImageUrl(w.term) && (
+                <div style={{ marginTop: 6 }}>
+                  <span style={styles.arrow}>→</span> {w.translation}
+                  {w.note && <div style={styles.note}>{w.note}</div>}
+                </div>
+              )}
             </div>
 
             <button
@@ -113,7 +132,6 @@ export default function Dictionary() {
   );
 }
 
-// 🎨 STYLES
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
@@ -187,5 +205,10 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     fontSize: 16,
     opacity: 0.6,
+  },
+  image: {
+    maxWidth: 120,
+    borderRadius: 10,
+    display: "block",
   },
 };
