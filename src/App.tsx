@@ -15,6 +15,8 @@ import OAuthCallback from "./pages/OAuthCallback";
 import Clankovnice from "./pages/Clankovnice";
 import Tipovacky from "./pages/Tipovacky";
 import Redakce from "./pages/Redakce";
+import Slovnik from "./pages/Slovnik";
+
 
 import Obchudek from "./pages/Obchudek";
 import Inventar from "./pages/Inventar";
@@ -69,6 +71,8 @@ const App = () => {
               <Route path="/u/:username" element={<Layout><Profile /></Layout>} />
               <Route path="*" element={<Layout><NotFound /></Layout>} />
               <Route path="/pozvankovnik" element={<Layout><Pozvankovnik /></Layout>} />
+              <Route path="/slovnik" element={<Layout><Slovnik /></Layout>} />
+              
           </Routes>
         </BrowserRouter>
       </PasswordChangeChecker>
