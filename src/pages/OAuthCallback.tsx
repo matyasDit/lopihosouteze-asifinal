@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { clearStoredState } from "@/lib/oauth";
 
 const OAuthCallback = () => {
   const navigate = useNavigate();
@@ -9,44 +8,33 @@ const OAuthCallback = () => {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Check for error in query params
       const params = new URLSearchParams(window.location.search);
       const errorMsg = params.get("error");
+
       if (errorMsg) {
         setError(errorMsg);
-        clearStoredState();
         return;
       }
 
-      // Extract tokens from URL hash
-      const hash = window.location.hash.substring(1);
-      const hashParams = new URLSearchParams(hash);
-      const accessToken = hashParams.get("access_token");
-      const refreshToken = hashParams.get("refresh_token");
+      // Check if user is already logged in
+      const { data: { user } } = await supabase.auth.getUser();
 
-      if (!accessToken || !refreshToken) {
-        setError("Chybí přihlašovací tokeny");
-        clearStoredState();
-        return;
+      if (user) {
+        // Already authenticated
+        navigate("/", { replace: true });
+      } else {
+        // Wait for session from magic link
+        const interval = setInterval(async () => {
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (currentUser) {
+            clearInterval(interval);
+            navigate("/", { replace: true });
+          }
+        }, 500);
+
+        // Timeout after 10 seconds
+        setTimeout(() => clearInterval(interval), 10000);
       }
-
-      // Set the session in Supabase client
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-
-      clearStoredState();
-
-      if (sessionError) {
-        console.error("Session error:", sessionError);
-        setError("Nepodařilo se nastavit session");
-        return;
-      }
-
-      // Clean URL and redirect
-      window.history.replaceState(null, "", "/oauth");
-      navigate("/", { replace: true });
     };
 
     handleCallback();
