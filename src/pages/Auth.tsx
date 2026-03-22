@@ -1,20 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Trophy, Sparkles, Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { Trophy, Sparkles, Mail, Lock, User, Loader2 } from 'lucide-react';
 import alikLogo from '@/assets/alik-logo.png';
-import { useSearchParams } from 'react-router-dom';
-import { z } from 'zod';
 import { useOAuth } from '@/hooks/useOAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { z } from 'zod';
 
 const loginSchema = z.object({
   email: z.string().email('Neplatný email'),
@@ -28,7 +26,8 @@ const signupSchema = loginSchema.extend({
 export default function Auth() {
   const navigate = useNavigate();
   const { user, signIn, signUp } = useAuth();
-  const { startOAuthFlow, isConfigured: isOAuthConfigured } = useOAuth();
+  const { startOAuthFlow } = useOAuth();
+  
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -37,65 +36,13 @@ export default function Auth() {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({ email: '', password: '', username: '' });
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!z.string().email().safeParse(resetEmail).success) {
-      toast.error('Neplatný email');
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/auth?reset=true`,
-    });
-    setLoading(false);
-
-    if (error) {
-      toast.error('Chyba při odesílání emailu');
-    } else {
-      toast.success('Email s odkazem pro reset hesla byl odeslán!');
-      setShowForgotPassword(false);
-      setResetEmail('');
-    }
-  };
-
-  const [searchParams] = useSearchParams();
-  const isResetMode = searchParams.get('reset') === 'true';
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-
   useEffect(() => {
-    if (user && !isResetMode) {
+    if (user) {
       navigate('/');
     }
-  }, [user, navigate, isResetMode]);
+  }, [user, navigate]);
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (newPassword.length < 6) {
-      toast.error('Heslo musí mít alespoň 6 znaků');
-      return;
-    }
-    
-    if (newPassword !== confirmPassword) {
-      toast.error('Hesla se neshodují');
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    setLoading(false);
-
-    if (error) {
-      toast.error('Chyba při změně hesla');
-    } else {
-      toast.success('Heslo bylo úspěšně změněno!');
-      navigate('/');
-    }
-  };
-
+  // LOGIN
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -121,6 +68,7 @@ export default function Auth() {
     }
   };
 
+  // SIGNUP
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -141,117 +89,49 @@ export default function Auth() {
         toast.error('Chyba při registraci');
       }
     } else {
-      toast.success('Účet vytvořen! Vítej v soutěži!');
-      navigate('/');
+      toast.success('Účet vytvořen! Nyní se přihlaš.');
+      setSignupForm({ email: '', password: '', username: '' });
     }
   };
 
-  if (isResetMode) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-hero p-4">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl animate-float" />
-          <div className="absolute bottom-20 right-10 w-48 h-48 bg-accent/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '1s' }} />
-        </div>
+  // FORGOT PASSWORD
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!z.string().email().safeParse(resetEmail).success) {
+      toast.error('Neplatný email');
+      return;
+    }
 
-        <Card className="w-full max-w-md relative z-10 shadow-hero border-0 bg-card/95 backdrop-blur-sm animate-scale-in">
-          <CardHeader className="text-center space-y-4 pb-2">
-            <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center shadow-glow">
-              <Lock className="w-8 h-8 text-primary-foreground" />
-            </div>
-            <div>
-              <CardTitle className="text-2xl font-display font-bold gradient-text">
-                Nastavit nové heslo
-              </CardTitle>
-              <CardDescription className="text-muted-foreground mt-2">
-                Zadejte své nové heslo
-              </CardDescription>
-            </div>
-          </CardHeader>
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/auth?reset=true`,
+    });
+    setLoading(false);
 
-          <CardContent>
-            <form onSubmit={handleUpdatePassword} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-password" className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-muted-foreground" />
-                  Nové heslo
-                </Label>
-                <Input
-                  id="new-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="h-12"
-                  required
-                />
-              </div>
+    if (error) {
+      toast.error('Chyba při odesílání emailu');
+    } else {
+      toast.success('Email s odkazem pro reset hesla byl odeslán!');
+      setShowForgotPassword(false);
+      setResetEmail('');
+    }
+  };
 
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password" className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-muted-foreground" />
-                  Potvrdit heslo
-                </Label>
-                <Input
-                  id="confirm-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="h-12"
-                  required
-                />
-              </div>
-
-              <Button type="submit" variant="hero" size="lg" className="w-full" disabled={loading}>
-                {loading ? 'Ukládám...' : 'Změnit heslo'}
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={() => navigate('/auth')}
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Zpět na přihlášení
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // OAUTH
+  const handleOAuthLogin = async () => {
+    setOauthLoading(true);
+    try {
+      await startOAuthFlow();
+    } catch (error) {
+      toast.error('Chyba při přihlašování přes Alíka');
+      setOauthLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-hero p-4">
-      <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Zapomenuté heslo</DialogTitle>
-            <DialogDescription>
-              Zadejte svůj email a pošleme vám odkaz pro reset hesla.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleForgotPassword} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="reset-email">Email</Label>
-              <Input
-                id="reset-email"
-                type="email"
-                placeholder="prezdivka@ls.ls"
-                value={resetEmail}
-                onChange={(e) => setResetEmail(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Odesílám...' : 'Odeslat reset email'}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
-
+      {/* Background effects */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl animate-float" />
         <div className="absolute bottom-20 right-10 w-48 h-48 bg-accent/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '1s' }} />
@@ -259,6 +139,7 @@ export default function Auth() {
       </div>
 
       <Card className="w-full max-w-md relative z-10 shadow-hero border-0 bg-card/95 backdrop-blur-sm animate-scale-in">
+        {/* Header */}
         <CardHeader className="text-center space-y-4 pb-2">
           <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center shadow-glow animate-bounce-subtle">
             <Trophy className="w-8 h-8 text-primary-foreground" />
@@ -269,48 +150,226 @@ export default function Auth() {
             </CardTitle>
             <CardDescription className="text-muted-foreground mt-2 flex items-center justify-center gap-2">
               <Sparkles className="w-4 h-4 text-primary" />
-              Připoj se k soutěži a sbírej body!
+              Připoj se do soutěže
               <Sparkles className="w-4 h-4 text-primary" />
             </CardDescription>
           </div>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="space-y-6">
+          {/* OAuth Button (Prominent) */}
+          <Button
+            variant="hero"
+            size="lg"
+            className="w-full gap-3 text-base h-12"
+            disabled={oauthLoading}
+            onClick={handleOAuthLogin}
+          >
+            {oauthLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Přesměrovávám...
+              </>
+            ) : (
+              <>
+                <img src={alikLogo} alt="Alík" className="w-5 h-5" />
+                Přihlásit se přes Alíka
+              </>
+            )}
+          </Button>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-muted" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Nebo</span>
+            </div>
+          </div>
+
+          {/* Email & Password Tabs */}
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-1 mb-6">
-              <TabsTrigger value="login" className="font-semibold">Přihlášení & Registrace</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="login" className="text-sm">Přihlášení</TabsTrigger>
+              <TabsTrigger value="signup" className="text-sm">Registrace</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="login">
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="relative my-4">
-                  <Separator />
+            {/* LOGIN TAB */}
+            <TabsContent value="login" className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="login-email" className="text-xs font-medium">
+                    Email
+                  </Label>
+                  <Input
+                    id="login-email"
+                    type="email"
+                    placeholder="tvuj@email.cz"
+                    value={loginForm.email}
+                    onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                    className="h-10"
+                    disabled={loading}
+                  />
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  className="w-full gap-2 border-primary/30 hover:border-primary hover:bg-primary/5 transition-all"
-                  disabled={oauthLoading || !isOAuthConfigured}
-                  onClick={async () => {
-                    setOauthLoading(true);
-                    try {
-                      await startOAuthFlow();
-                    } catch (error) {
-                      toast.error('Chyba při přihlašování přes OAuth');
-                      setOauthLoading(false);
-                    }
-                  }}
-                >
-                  <img src={alikLogo} alt="Alík" className="w-5 h-5" />
-                  {oauthLoading ? 'Přesměrovávám...' : 'Přihlásit přes Alíka'}
+                <div className="space-y-2">
+                  <Label htmlFor="login-password" className="text-xs font-medium">
+                    Heslo
+                  </Label>
+                  <Input
+                    id="login-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={loginForm.password}
+                    onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                    className="h-10"
+                    disabled={loading}
+                  />
+                </div>
+
+                <Button type="submit" className="w-full h-10" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Přihlašuji...
+                    </>
+                  ) : (
+                    'Přihlásit se'
+                  )}
+                </Button>
+              </form>
+
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="w-full text-center text-xs text-primary hover:underline"
+              >
+                Zapomenuté heslo?
+              </button>
+            </TabsContent>
+
+            {/* SIGNUP TAB */}
+            <TabsContent value="signup" className="space-y-4">
+              <form onSubmit={handleSignup} className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-username" className="text-xs font-medium">
+                    Přezdívka
+                  </Label>
+                  <Input
+                    id="signup-username"
+                    type="text"
+                    placeholder="tvoje_przezdivka"
+                    value={signupForm.username}
+                    onChange={(e) => setSignupForm({ ...signupForm, username: e.target.value })}
+                    className="h-10"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email" className="text-xs font-medium">
+                    Email
+                  </Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="tvuj@email.cz"
+                    value={signupForm.email}
+                    onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
+                    className="h-10"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password" className="text-xs font-medium">
+                    Heslo
+                  </Label>
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={signupForm.password}
+                    onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
+                    className="h-10"
+                    disabled={loading}
+                  />
+                </div>
+
+                <Button type="submit" className="w-full h-10" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Registruji...
+                    </>
+                  ) : (
+                    'Vytvořit účet'
+                  )}
                 </Button>
               </form>
             </TabsContent>
           </Tabs>
+
+          {/* Privacy note */}
+          <p className="text-xs text-muted-foreground text-center">
+            Přihlášením souhlasíš s našimi{' '}
+            <a href="/pravidla-ochrana-ou" className="text-primary hover:underline">
+              pravidly a ochranou
+            </a>
+          </p>
         </CardContent>
       </Card>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Obnovit heslo</DialogTitle>
+            <DialogDescription>
+              Zadej svůj email a pošleme ti odkaz pro reset hesla.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="reset-email" className="text-sm">
+                Email
+              </Label>
+              <Input
+                id="reset-email"
+                type="email"
+                placeholder="tvuj@email.cz"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowForgotPassword(false)}
+                disabled={loading}
+              >
+                Zrušit
+              </Button>
+              <Button type="submit" className="flex-1" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Odesílám...
+                  </>
+                ) : (
+                  'Odeslat'
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
