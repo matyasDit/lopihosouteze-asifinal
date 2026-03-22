@@ -6,28 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Rate limiting
-const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const RATE_LIMIT_MAX_REQUESTS = 10;
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-
-function checkRateLimit(ip: string) {
-  const now = Date.now();
-  const record = rateLimitStore.get(ip);
-
-  if (!record || now > record.resetAt) {
-    rateLimitStore.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-
-  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return false;
-  }
-
-  record.count++;
-  return true;
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -39,58 +17,15 @@ serve(async (req) => {
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-  const clientIP =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("cf-connecting-ip") ||
-    "unknown";
-
-  if (!checkRateLimit(clientIP)) {
-    return new Response(
-      JSON.stringify({ error: "Too many requests" }),
-      { status: 429, headers: corsHeaders }
-    );
-  }
-
   try {
-    const url = new URL(req.url);
-    const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state");
-    const errorParam = url.searchParams.get("error");
+    const body = await req.json();
+    const { code, state, redirectUri } = body;
 
-    // Kontrola OAuth chyby z providera
-    if (errorParam) {
-      return Response.redirect(`${origin}/oauth?error=${errorParam}`, 302);
-    }
-
-    // ===== VALIDACE STATE (CSRF OCHRANA) =====
-    if (!state) {
-      return Response.redirect(`${origin}/oauth?error=missing_state`, 302);
-    }
-
-    const { data: stateRecord, error: stateError } = await supabaseAdmin
-      .from("oauth_states")
-      .select("*")
-      .eq("state", state)
-      .single();
-
-    if (stateError || !stateRecord) {
-      console.error("State validation failed:", stateError);
-      return Response.redirect(`${origin}/oauth?error=invalid_state`, 302);
-    }
-
-    // Kontrola expiraci
-    if (new Date() > new Date(stateRecord.expires_at)) {
-      return Response.redirect(`${origin}/oauth?error=state_expired`, 302);
-    }
-
-    // Kontrola, zda nebyl state již použit
-    if (stateRecord.used_at) {
-      return Response.redirect(`${origin}/oauth?error=state_reused`, 302);
-    }
-    // ===== KONEC VALIDACE STATE =====
-
-    if (!code) {
-      return Response.redirect(`${origin}/oauth?error=missing_code`, 302);
+    if (!code || !state) {
+      return new Response(
+        JSON.stringify({ error: "missing_code_or_state" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // OAuth config z env
@@ -100,11 +35,12 @@ serve(async (req) => {
     const userInfoUrl = Deno.env.get("OAUTH_USERINFO_URL");
 
     if (!clientId || !clientSecret || !tokenUrl || !userInfoUrl) {
-      console.error("OAuth config missing");
-      return Response.redirect(`${origin}/oauth?error=config_error`, 302);
+      console.error("Missing OAuth config");
+      return new Response(
+        JSON.stringify({ error: "config_error" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-
-    const redirectUri = `${origin}/oauth`;
 
     // === EXCHANGE CODE FOR TOKEN ===
     const tokenParams = new URLSearchParams({
@@ -115,6 +51,7 @@ serve(async (req) => {
       client_secret: clientSecret,
     });
 
+    console.log("Exchanging code for token...");
     const tokenResponse = await fetch(tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -122,18 +59,25 @@ serve(async (req) => {
     });
 
     if (!tokenResponse.ok) {
-      console.error("Token exchange failed:", tokenResponse.status);
-      return Response.redirect(`${origin}/oauth?error=token_exchange`, 302);
+      console.error("Token exchange failed:", tokenResponse.status, await tokenResponse.text());
+      return new Response(
+        JSON.stringify({ error: "token_exchange_failed" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const tokenData = await tokenResponse.json();
 
     if (!tokenData.access_token) {
       console.error("No access token in response");
-      return Response.redirect(`${origin}/oauth?error=no_access_token`, 302);
+      return new Response(
+        JSON.stringify({ error: "no_access_token" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // === GET USER INFO ===
+    console.log("Fetching user info...");
     const userInfoResponse = await fetch(userInfoUrl, {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
@@ -142,7 +86,10 @@ serve(async (req) => {
 
     if (!userInfoResponse.ok) {
       console.error("User info fetch failed:", userInfoResponse.status);
-      return Response.redirect(`${origin}/oauth?error=userinfo_failed`, 302);
+      return new Response(
+        JSON.stringify({ error: "userinfo_failed" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const userData = await userInfoResponse.json();
@@ -156,24 +103,31 @@ serve(async (req) => {
       : null;
 
     if (!username || !alikUserId) {
-      console.error("Invalid user data from provider");
-      return Response.redirect(`${origin}/oauth?error=invalid_user_data`, 302);
+      console.error("Invalid user data:", userData);
+      return new Response(
+        JSON.stringify({ error: "invalid_user_data" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const email = `alik_${alikUserId}@ls.local`;
 
     // === FIND OR CREATE USER ===
+    console.log("Looking for user:", alikUserId);
     const { data: users } = await supabaseAdmin.auth.admin.listUsers();
     let existingUser = users.users.find(
       (u) => u.user_metadata?.alik_user_id === alikUserId
     );
 
     let userId: string;
+    let authToken: string;
+    let refreshToken: string;
 
     if (existingUser) {
-      // Update existing user
+      console.log("Found existing user:", existingUser.id);
       userId = existingUser.id;
 
+      // Update user metadata
       await supabaseAdmin.auth.admin.updateUserById(userId, {
         user_metadata: {
           ...existingUser.user_metadata,
@@ -183,6 +137,7 @@ serve(async (req) => {
         },
       });
 
+      // Update profile
       await supabaseAdmin
         .from("profiles")
         .update({
@@ -190,8 +145,32 @@ serve(async (req) => {
           avatar_url: avatarUrl,
         })
         .eq("id", userId);
+
+      // Vygenerujte nový token
+      const { data: sessionData, error: sessionError } =
+        await supabaseAdmin.auth.admin.generateLink({
+          type: "magiclink",
+          email,
+          options: {
+            redirectTo: `${origin}?oauth_success=true`,
+          },
+        });
+
+      if (sessionError) {
+        console.error("Session generation failed:", sessionError);
+        return new Response(
+          JSON.stringify({ error: "session_failed" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Extract tokens from the magic link
+      const { data: session } = await supabaseAdmin.auth.admin.getUser(userId);
+      // Use temporary token
+      authToken = sessionData.properties.action_link.split("#")[1] || "";
+      refreshToken = sessionData.properties.action_link.split("#")[1] || "";
     } else {
-      // Create new user
+      console.log("Creating new user:", alikUserId);
       const randomPassword = crypto.randomUUID() + crypto.randomUUID();
 
       const { data: newUser, error: createError } =
@@ -210,47 +189,75 @@ serve(async (req) => {
 
       if (createError) {
         console.error("User creation failed:", createError);
-        return Response.redirect(`${origin}/oauth?error=create_user_failed`, 302);
+        return new Response(
+          JSON.stringify({ error: "create_user_failed" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       userId = newUser.user.id;
 
       // Create profile
-      await supabaseAdmin.from("profiles").insert({
+      const { error: profileError } = await supabaseAdmin.from("profiles").insert({
         id: userId,
         username,
         avatar_url: avatarUrl,
       });
+
+      if (profileError) {
+        console.error("Profile creation failed:", profileError);
+      }
+
+      // Vygenerujte token pro nového uživatele
+      const { data: sessionData, error: sessionError } =
+        await supabaseAdmin.auth.admin.generateLink({
+          type: "magiclink",
+          email,
+          options: {
+            redirectTo: `${origin}?oauth_success=true`,
+          },
+        });
+
+      if (sessionError) {
+        console.error("Session generation failed:", sessionError);
+        return new Response(
+          JSON.stringify({ error: "session_failed" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      authToken = sessionData.properties.action_link.split("#")[1] || "";
+      refreshToken = sessionData.properties.action_link.split("#")[1] || "";
     }
 
-    // === MARK STATE AS USED ===
-    await supabaseAdmin
-      .from("oauth_states")
-      .update({ used_at: new Date().toISOString() })
-      .eq("state", state);
+    console.log("OAuth callback successful for user:", userId);
 
-    // === CREATE SUPABASE SESSION ===
-    const { data: sessionData, error: sessionError } =
-      await supabaseAdmin.auth.admin.generateLink({
-        type: "magiclink",
-        email,
-        options: {
-          redirectTo: `${origin}?oauth_success=true`,
+    return new Response(
+      JSON.stringify({
+        accessToken: authToken,
+        refreshToken: refreshToken,
+      }),
+      {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
         },
-      });
-
-    if (sessionError) {
-      console.error("Session generation failed:", sessionError);
-      return Response.redirect(`${origin}/oauth?error=session_failed`, 302);
-    }
-
-    // Extract tokens from the magic link session
-    const actionLink = sessionData.properties.action_link;
-
-    // Redirect to action link - Supabase will handle setting the session
-    return Response.redirect(actionLink, 302);
+      }
+    );
   } catch (error) {
     console.error("OAuth callback error:", error);
-    return Response.redirect(`${origin}/oauth?error=unexpected_error`, 302);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "unexpected_error",
+      }),
+      {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      }
+    );
   }
 });
